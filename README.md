@@ -1,57 +1,70 @@
 # mypldotnet
 
-Step-by-Step Project: 
-A Simple and Detailed Integration of C#, Entity Framework Core, PostgreSQL, and a PL/pgSQL Function
+### Step-by-Step Project: 
 
-Our project will be a .NET console application designed to manage a product catalog.
+A Simple and Detailed Integration of C#, Entity Framework Core, PostgreSQL, and a PL/pgSQL Function.
+
+This project will be a .NET console application designed to manage a product catalog.
 
 What We’ll Do
 
-Set Up the Database: Create a products table in PostgreSQL.
+##### * Set Up the Database: Create a products table in PostgreSQL.
 
-Write a PL/pgSQL Function: Create a function that calculates the total inventory value.
+##### * Write a PL/pgSQL Function: Create a function that calculates the total inventory value.
 
-Create the C# Project: Set up a console application.
+##### * Create the C# Project: Set up a console application.
 
-Integrate with Entity Framework Core: Map the products table to a C# class, configure the connection, and set up the DbContext.
+##### * Integrate with Entity Framework Core: Map the products table to a C# class, configure the connection, and set up the DbContext.
 
-Develop CRUD Operations: Implement Create, Read, Update, and Delete operations using EF Core.
+##### * Develop CRUD Operations: Implement Create, Read, Update, and Delete operations using EF Core.
 
-Call the PL/pgSQL Function: Execute the custom PostgreSQL function from C# and retrieve the result.
+##### * Call the PL/pgSQL Function: Execute the custom PostgreSQL function from C# and retrieve the result.
 
-Prerequisites
+### Prerequisites
 
-Before starting, make sure you have the following installed:
+Before starting, be sure to have the following installed:
 
-.NET 8 SDK (or later): https://dotnet.microsoft.com/download
-CREATE TABLE produtos (
+##### * .NET 8 SDK (or >): https://dotnet.microsoft.com/download
+
+##### * PostgreSQL: https://www.postgresql.org/download/
+
+##### * A data base administrator, like pgAdmin is a plus.
+
+
+### Part 1: The Database (PostgreSQL and PL/pgSQL)
+
+First, create a database, table, and function directly in PostgreSQL using psql CLI.
+##### * Create a Database: Using pgAdmin or psql, create a new database. It’ll call it 'postgres'.
+##### * Create the Products Table: Once conncted in the new db, Rrun the following SQL script to create the table that will store our products.    
+
+```SQL
+CREATE TABLE products (
     id SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    preco NUMERIC(10, 2) NOT NULL,
-    quantidade_estoque INT NOT NULL,
-    data_cadastro TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    name VARCHAR(100) NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    stock_quantity INT NOT NULL,
+    registration_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Inserindo alguns dados de exemplo (opcional)
-INSERT INTO produtos (nome, preco, quantidade_estoque) VALUES
+-- Insert +100 itens
+INSERT INTO products (name, price, stock_quantity) VALUE
 ('Laptop Gamer', 7500.50, 10),
-('Mouse sem Fio', 150.75, 50),
-('Teclado Mecânico', 450.00, 25);
+('Wireless Mouse', 150.75, 50),
+('Mechanical keyboard XPTO', 410, 35),
+('Laptop Gamer gen.2', 7500.50, 10),
+('Wireless Mouse', 150.75, 50),
+.
+.
+('Portable Bluetooth Radio', 270.00, 20),
+('Noise Cancelling Earbuds', 699.00, 22),
+('Smart Ceiling Light', 380.00, 14);
 
-    Explicação:
+```
 
-        id SERIAL PRIMARY KEY: Uma chave primária que se auto-incrementa.
+### Create the PL/pgSQL Function:
 
-        nome VARCHAR(100): O nome do produto.
-
-        preco NUMERIC(10, 2): O preço, ideal para valores monetários.
-
-        quantidade_estoque INT: A quantidade de itens em estoque.
-
-        data_cadastro TIMESTAMP: A data e hora em que o registro foi criado, com valor padrão para o momento atual.
-
-Crie a Função em PL/pgSQL: Agora, vamos criar uma função que calcula o valor total de todos os produtos em estoque (preço * quantidade).
-SQL
+Now, let’s create a function that calculates the total value of all products in stock (price × quantity).
+SQL:
 
     CREATE OR REPLACE FUNCTION fn_calcular_valor_total_estoque()
     RETURNS NUMERIC AS $$
@@ -68,23 +81,10 @@ SQL
     END;
     $$ LANGUAGE plpgsql;
 
-        Explicação:
 
-            CREATE OR REPLACE FUNCTION ...: Define o início da nossa função.
+Now the database configuration and actions are finished by now.
 
-            RETURNS NUMERIC: Especifica que a função retornará um valor numérico.
-
-            DECLARE valor_total NUMERIC := 0;: Declara uma variável local para armazenar o resultado.
-
-            SELECT SUM(...) INTO valor_total FROM produtos;: Este é o coração da função. Ele executa a consulta de agregação e armazena o resultado na nossa variável valor_total.
-
-            RETURN COALESCE(valor_total, 0);: Retorna o valor total. COALESCE é usado para garantir que, se a tabela estiver vazia e o SUM retornar NULL, a função retorne 0 em vez de NULL.
-
-            $$ LANGUAGE plpgsql;: Define que a linguagem usada na função é PL/pgSQL.
-
-Pronto! A parte do banco de dados está configurada.
-
-Parte 2: A Aplicação C# com Entity Framework Core
+### Part 2: C# App  with Entity Framework Core
 
 Agora vamos para o código C#.
 
