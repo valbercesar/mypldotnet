@@ -1,3 +1,602 @@
+Step-by-Step Project: 
+A Simple and Detailed Integration of C#, Entity Framework Core, PostgreSQL, and a PL/pgSQL Function
+
+Our project will be a .NET console application designed to manage a product catalog.
+
+What We’ll Do
+
+Set Up the Database: Create a products table in PostgreSQL.
+
+Write a PL/pgSQL Function: Create a function that calculates the total inventory value.
+
+Create the C# Project: Set up a console application.
+
+Integrate with Entity Framework Core: Map the products table to a C# class, configure the connection, and set up the DbContext.
+
+Develop CRUD Operations: Implement Create, Read, Update, and Delete operations using EF Core.
+
+Call the PL/pgSQL Function: Execute the custom PostgreSQL function from C# and retrieve the result.
+
+Prerequisites
+
+Before starting, make sure you have the following installed:
+
+.NET 8 SDK (or later): https://dotnet.microsoft.com/download
+CREATE TABLE produtos (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    preco NUMERIC(10, 2) NOT NULL,
+    quantidade_estoque INT NOT NULL,
+    data_cadastro TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserindo alguns dados de exemplo (opcional)
+INSERT INTO produtos (nome, preco, quantidade_estoque) VALUES
+('Laptop Gamer', 7500.50, 10),
+('Mouse sem Fio', 150.75, 50),
+('Teclado Mecânico', 450.00, 25);
+
+    Explicação:
+
+        id SERIAL PRIMARY KEY: Uma chave primária que se auto-incrementa.
+
+        nome VARCHAR(100): O nome do produto.
+
+        preco NUMERIC(10, 2): O preço, ideal para valores monetários.
+
+        quantidade_estoque INT: A quantidade de itens em estoque.
+
+        data_cadastro TIMESTAMP: A data e hora em que o registro foi criado, com valor padrão para o momento atual.
+
+Crie a Função em PL/pgSQL: Agora, vamos criar uma função que calcula o valor total de todos os produtos em estoque (preço * quantidade).
+SQL
+
+    CREATE OR REPLACE FUNCTION fn_calcular_valor_total_estoque()
+    RETURNS NUMERIC AS $$
+    DECLARE
+        valor_total NUMERIC := 0;
+    BEGIN
+        -- Calcula a soma de (preço * quantidade) para todos os produtos
+        SELECT SUM(preco * quantidade_estoque)
+        INTO valor_total
+        FROM produtos;
+
+        -- Retorna o valor calculado
+        RETURN COALESCE(valor_total, 0);
+    END;
+    $$ LANGUAGE plpgsql;
+
+        Explicação:
+
+            CREATE OR REPLACE FUNCTION ...: Define o início da nossa função.
+
+            RETURNS NUMERIC: Especifica que a função retornará um valor numérico.
+
+            DECLARE valor_total NUMERIC := 0;: Declara uma variável local para armazenar o resultado.
+
+            SELECT SUM(...) INTO valor_total FROM produtos;: Este é o coração da função. Ele executa a consulta de agregação e armazena o resultado na nossa variável valor_total.
+
+            RETURN COALESCE(valor_total, 0);: Retorna o valor total. COALESCE é usado para garantir que, se a tabela estiver vazia e o SUM retornar NULL, a função retorne 0 em vez de NULL.
+
+            $$ LANGUAGE plpgsql;: Define que a linguagem usada na função é PL/pgSQL.
+
+Pronto! A parte do banco de dados está configurada.
+
+Parte 2: A Aplicação C# com Entity Framework Core
+
+Agora vamos para o código C#.
+
+    Crie um novo projeto de Console: Abra seu terminal ou prompt de comando e execute:
+    Bash
+
+dotnet new console -o GerenciadorDeProdutosApp
+cd GerenciadorDeProdutosApp
+
+Instale os Pacotes NuGet Necessários: Precisamos do driver do PostgreSQL para o EF Core.
+Bash
+
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+dotnet add package Microsoft.EntityFrameworkCore.Design
+
+    Npgsql.EntityFrameworkCore.PostgreSQL: O provedor de banco de dados que permite ao EF Core se comunicar com o PostgreSQL.
+
+    Microsoft.EntityFrameworkCore.Design: Contém ferramentas de linha de comando para o EF Core (útil para migrações, embora não vamos gerá-las aqui, é uma boa prática incluí-lo).
+
+Crie a Classe de Modelo (Entity): Crie um novo arquivo chamado Produto.cs. Esta classe será o "espelho" da nossa tabela produtos no C#.
+C#
+
+// Produto.cs
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("produtos")] // Mapeia esta classe para a tabela "produtos"
+public class Produto
+{
+    [Key] // Marca a propriedade como chave primária
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("nome")]
+    public string Nome { get; set; }
+
+    [Column("preco")]
+    public decimal Preco { get; set; }
+
+    [Column("quantidade_estoque")]
+    public int QuantidadeEstoque { get; set; }
+
+    [Column("data_cadastro")]
+    public DateTime DataCadastro { get; set; }
+}
+
+    Explicação:
+
+        [Table("produtos")]: Informa ao EF Core que esta classe corresponde à tabela produtos.
+
+        [Key]: Define Id como a chave primária.
+
+        [Column("...")]: Mapeia cada propriedade para sua respectiva coluna no banco de dados. Isso é importante para seguir a convenção de nomes do C# (PascalCase) e do SQL (snake_case).
+
+Crie o Contexto do Banco de Dados (DbContext): O DbContext é a ponte entre suas classes C# e o banco de dados. Crie um novo arquivo chamado AppDbContext.cs.
+C#
+
+    // AppDbContext.cs
+    using Microsoft.EntityFrameworkCore;
+
+    public class AppDbContext : DbContext
+    {
+        // DbSet representa a coleção de todas as entidades no contexto,
+        // ou seja, uma representação da tabela "produtos".
+        public DbSet<Produto> Produtos { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            // Substitua com sua string de conexão real
+            var connectionString = "Host=localhost;Database=gerenciador_produtos;Username=seu_usuario;Password=sua_senha";
+            optionsBuilder.UseNpgsql(connectionString);
+        }
+    }
+
+        Explicação:
+
+            public DbSet<Produto> Produtos { get; set; }: Cria uma propriedade que o EF Core usará para interagir com a tabela produtos. Você fará consultas como context.Produtos.ToList().
+
+            OnConfiguring: Este método configura a conexão com o banco de dados.
+
+            IMPORTANTE: Altere seu_usuario e sua_senha para as credenciais do seu banco de dados PostgreSQL.
+
+Parte 3: Mão na Massa! O Código Principal
+
+Agora vamos editar o arquivo Program.cs para realizar as operações CRUD e chamar nossa função.
+C#
+
+// Program.cs
+using System;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        Console.WriteLine("--- Gerenciador de Produtos com EF Core e PostgreSQL ---");
+
+        // Usando 'using' para garantir que a conexão com o banco seja fechada corretamente.
+        using (var context = new AppDbContext())
+        {
+            // Garante que o banco de dados está acessível.
+            // Não cria o banco, apenas testa a conexão.
+            context.Database.EnsureCreated();
+
+            // 1. CREATE: Adicionando um novo produto
+            Console.WriteLine("\n>> Inserindo um novo produto...");
+            var novoProduto = new Produto
+            {
+                Nome = "Monitor Ultrawide",
+                Preco = 2300.00m,
+                QuantidadeEstoque = 15
+            };
+            context.Produtos.Add(novoProduto);
+            context.SaveChanges(); // Salva as mudanças no banco de dados
+            Console.WriteLine("Produto inserido com sucesso!");
+
+            // 2. READ: Lendo e exibindo todos os produtos
+            Console.WriteLine("\n>> Listando todos os produtos:");
+            var todosOsProdutos = context.Produtos.OrderBy(p => p.Nome).ToList();
+            foreach (var produto in todosOsProdutos)
+            {
+                Console.WriteLine($"ID: {produto.Id}, Nome: {produto.Nome}, Preço: {produto.Preco:C}, Estoque: {produto.QuantidadeEstoque}");
+            }
+
+            // 3. UPDATE: Atualizando um produto
+            Console.WriteLine("\n>> Atualizando o preço do 'Mouse sem Fio'...");
+            var produtoParaAtualizar = context.Produtos.FirstOrDefault(p => p.Nome == "Mouse sem Fio");
+            if (produtoParaAtualizar != null)
+            {
+                produtoParaAtualizar.Preco = 165.50m; // Novo preço
+                context.SaveChanges();
+                Console.WriteLine("Preço atualizado!");
+            }
+
+            // 4. DELETE: Removendo um produto
+            Console.WriteLine("\n>> Deletando o 'Monitor Ultrawide' recém-criado...");
+            var produtoParaDeletar = context.Produtos.FirstOrDefault(p => p.Nome == "Monitor Ultrawide");
+            if (produtoParaDeletar != null)
+            {
+                context.Produtos.Remove(produtoParaDeletar);
+                context.SaveChanges();
+                Console.WriteLine("Produto deletado!");
+            }
+
+            // 5. CHAMANDO A FUNÇÃO PL/pgSQL
+            Console.WriteLine("\n>> Calculando o valor total do estoque com a função PL/pgSQL...");
+
+            // Para chamar uma função scalar (que retorna um único valor),
+            // a forma mais simples e segura é usar SQL puro com EF Core.
+            decimal valorTotalEstoque = 0;
+
+            // Abre a conexão gerenciada pelo EF Core
+            var connection = context.Database.GetDbConnection();
+            connection.Open();
+
+            // Cria um comando para executar a função
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT fn_calcular_valor_total_estoque();";
+                var result = command.ExecuteScalar(); // Executa e retorna o primeiro valor da primeira linha
+
+                if (result != null && result != DBNull.Value)
+                {
+                    valorTotalEstoque = Convert.ToDecimal(result);
+                }
+            }
+            connection.Close(); // Fecha a conexão
+
+            Console.WriteLine($"O valor total do estoque é: {valorTotalEstoque:C}");
+        }
+
+        Console.WriteLine("\n--- Fim da Execução ---");
+    }
+}
+
+    Explicação do Código Principal:
+
+        using (var context = new AppDbContext()): Instancia nosso contexto. O using garante que os recursos de conexão sejam liberados ao final.
+
+        context.Add(): Adiciona uma nova entidade para ser rastreada pelo EF Core.
+
+        projeto passo a passo, bem detalhado e simples, que integra C#, Entity Framework Core, PostgreSQL e uma função em PL/pgSQL.
+
+O nosso projeto será uma aplicação de console (.NET) para gerenciar um catálogo de produtos.
+
+O que vamos fazer:
+
+    Configurar o Banco de Dados: Criar uma tabela produtos no PostgreSQL.
+
+    Escrever uma Função em PL/pgSQL: Criar uma função que calcula o valor total do estoque.
+
+    Criar o Projeto C#: Configurar uma aplicação de console.
+
+    Integrar com Entity Framework Core: Mapear a tabela produtos para uma classe C#, configurar a conexão e o DbContext.
+
+    Desenvolver as Operações (CRUD): Criar, Ler, Atualizar e Deletar produtos usando EF Core.
+
+    Chamar a Função PL/pgSQL: Executar a nossa função customizada a partir do C# e obter o resultado.
+
+Pré-requisitos
+
+Antes de começar, certifique-se de que você tem o seguinte instalado:
+
+    .NET 8 SDK (ou superior): https://dotnet.microsoft.com/download
+
+    PostgreSQL: https://www.postgresql.org/download/
+
+    Um editor de código: Visual Studio 2022, JetBrains Rider ou Visual Studio Code.
+
+    Uma ferramenta para gerenciar o Postgres: pgAdmin (geralmente vem com a instalação) ou DBeaver.
+
+Parte 1: O Banco de Dados (PostgreSQL e PL/pgSQL)
+
+Primeiro, vamos criar nossa base, a tabela e a função diretamente no PostgreSQL.
+
+    Crie um Banco de Dados: Usando o pgAdmin ou psql, crie um novo banco de dados. Vamos chamá-lo de gerenciador_produtos.
+
+    Crie a Tabela de Produtos: Execute o seguinte script SQL no seu banco de dados gerenciador_produtos para criar a tabela que armazenará nossos produtos.
+    SQL
+
+CREATE TABLE produtos (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    preco NUMERIC(10, 2) NOT NULL,
+    quantidade_estoque INT NOT NULL,
+    data_cadastro TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserindo alguns dados de exemplo (opcional)
+INSERT INTO produtos (nome, preco, quantidade_estoque) VALUES
+('Laptop Gamer', 7500.50, 10),
+('Mouse sem Fio', 150.75, 50),
+('Teclado Mecânico', 450.00, 25);
+
+    Explicação:
+
+        id SERIAL PRIMARY KEY: Uma chave primária que se auto-incrementa.
+
+        nome VARCHAR(100): O nome do produto.
+
+        preco NUMERIC(10, 2): O preço, ideal para valores monetários.
+
+        quantidade_estoque INT: A quantidade de itens em estoque.
+
+        data_cadastro TIMESTAMP: A data e hora em que o registro foi criado, com valor padrão para o momento atual.
+
+Crie a Função em PL/pgSQL: Agora, vamos criar uma função que calcula o valor total de todos os produtos em estoque (preço * quantidade).
+SQL
+
+    CREATE OR REPLACE FUNCTION fn_calcular_valor_total_estoque()
+    RETURNS NUMERIC AS $$
+    DECLARE
+        valor_total NUMERIC := 0;
+    BEGIN
+        -- Calcula a soma de (preço * quantidade) para todos os produtos
+        SELECT SUM(preco * quantidade_estoque)
+        INTO valor_total
+        FROM produtos;
+
+        -- Retorna o valor calculado
+        RETURN COALESCE(valor_total, 0);
+    END;
+    $$ LANGUAGE plpgsql;
+
+        Explicação:
+
+            CREATE OR REPLACE FUNCTION ...: Define o início da nossa função.
+
+            RETURNS NUMERIC: Especifica que a função retornará um valor numérico.
+
+            DECLARE valor_total NUMERIC := 0;: Declara uma variável local para armazenar o resultado.
+
+            SELECT SUM(...) INTO valor_total FROM produtos;: Este é o coração da função. Ele executa a consulta de agregação e armazena o resultado na nossa variável valor_total.
+
+            RETURN COALESCE(valor_total, 0);: Retorna o valor total. COALESCE é usado para garantir que, se a tabela estiver vazia e o SUM retornar NULL, a função retorne 0 em vez de NULL.
+
+            $$ LANGUAGE plpgsql;: Define que a linguagem usada na função é PL/pgSQL.
+
+Pronto! A parte do banco de dados está configurada.
+
+Parte 2: A Aplicação C# com Entity Framework Core
+
+Agora vamos para o código C#.
+
+    Crie um novo projeto de Console: Abra seu terminal ou prompt de comando e execute:
+    Bash
+
+dotnet new console -o GerenciadorDeProdutosApp
+cd GerenciadorDeProdutosApp
+
+Instale os Pacotes NuGet Necessários: Precisamos do driver do PostgreSQL para o EF Core.
+Bash
+
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+dotnet add package Microsoft.EntityFrameworkCore.Design
+
+    Npgsql.EntityFrameworkCore.PostgreSQL: O provedor de banco de dados que permite ao EF Core se comunicar com o PostgreSQL.
+
+    Microsoft.EntityFrameworkCore.Design: Contém ferramentas de linha de comando para o EF Core (útil para migrações, embora não vamos gerá-las aqui, é uma boa prática incluí-lo).
+
+Crie a Classe de Modelo (Entity): Crie um novo arquivo chamado Produto.cs. Esta classe será o "espelho" da nossa tabela produtos no C#.
+C#
+
+// Produto.cs
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("produtos")] // Mapeia esta classe para a tabela "produtos"
+public class Produto
+{
+    [Key] // Marca a propriedade como chave primária
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("nome")]
+    public string Nome { get; set; }
+
+    [Column("preco")]
+    public decimal Preco { get; set; }
+
+    [Column("quantidade_estoque")]
+    public int QuantidadeEstoque { get; set; }
+
+    [Column("data_cadastro")]
+    public DateTime DataCadastro { get; set; }
+}
+
+    Explicação:
+
+        [Table("produtos")]: Informa ao EF Core que esta classe corresponde à tabela produtos.
+
+        [Key]: Define Id como a chave primária.
+
+        [Column("...")]: Mapeia cada propriedade para sua respectiva coluna no banco de dados. Isso é importante para seguir a convenção de nomes do C# (PascalCase) e do SQL (snake_case).
+
+Crie o Contexto do Banco de Dados (DbContext): O DbContext é a ponte entre suas classes C# e o banco de dados. Crie um novo arquivo chamado AppDbContext.cs.
+C#
+
+    // AppDbContext.cs
+    using Microsoft.EntityFrameworkCore;
+
+    public class AppDbContext : DbContext
+    {
+        // DbSet representa a coleção de todas as entidades no contexto,
+        // ou seja, uma representação da tabela "produtos".
+        public DbSet<Produto> Produtos { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            // Substitua com sua string de conexão real
+            var connectionString = "Host=localhost;Database=gerenciador_produtos;Username=seu_usuario;Password=sua_senha";
+            optionsBuilder.UseNpgsql(connectionString);
+        }
+    }
+
+        Explicação:
+
+            public DbSet<Produto> Produtos { get; set; }: Cria uma propriedade que o EF Core usará para interagir com a tabela produtos. Você fará consultas como context.Produtos.ToList().
+
+            OnConfiguring: Este método configura a conexão com o banco de dados.
+
+            IMPORTANTE: Altere seu_usuario e sua_senha para as credenciais do seu banco de dados PostgreSQL.
+
+Parte 3: Mão na Massa! O Código Principal
+
+Agora vamos editar o arquivo Program.cs para realizar as operações CRUD e chamar nossa função.
+C#
+
+// Program.cs
+using System;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        Console.WriteLine("--- Gerenciador de Produtos com EF Core e PostgreSQL ---");
+
+        // Usando 'using' para garantir que a conexão com o banco seja fechada corretamente.
+        using (var context = new AppDbContext())
+        {
+            // Garante que o banco de dados está acessível.
+            // Não cria o banco, apenas testa a conexão.
+            context.Database.EnsureCreated();
+
+            // 1. CREATE: Adicionando um novo produto
+            Console.WriteLine("\n>> Inserindo um novo produto...");
+            var novoProduto = new Produto
+            {
+                Nome = "Monitor Ultrawide",
+                Preco = 2300.00m,
+                QuantidadeEstoque = 15
+            };
+            context.Produtos.Add(novoProduto);
+            context.SaveChanges(); // Salva as mudanças no banco de dados
+            Console.WriteLine("Produto inserido com sucesso!");
+
+            // 2. READ: Lendo e exibindo todos os produtos
+            Console.WriteLine("\n>> Listando todos os produtos:");
+            var todosOsProdutos = context.Produtos.OrderBy(p => p.Nome).ToList();
+            foreach (var produto in todosOsProdutos)
+            {
+                Console.WriteLine($"ID: {produto.Id}, Nome: {produto.Nome}, Preço: {produto.Preco:C}, Estoque: {produto.QuantidadeEstoque}");
+            }
+
+            // 3. UPDATE: Atualizando um produto
+            Console.WriteLine("\n>> Atualizando o preço do 'Mouse sem Fio'...");
+            var produtoParaAtualizar = context.Produtos.FirstOrDefault(p => p.Nome == "Mouse sem Fio");
+            if (produtoParaAtualizar != null)
+            {
+                produtoParaAtualizar.Preco = 165.50m; // Novo preço
+                context.SaveChanges();
+                Console.WriteLine("Preço atualizado!");
+            }
+
+            // 4. DELETE: Removendo um produto
+            Console.WriteLine("\n>> Deletando o 'Monitor Ultrawide' recém-criado...");
+            var produtoParaDeletar = context.Produtos.FirstOrDefault(p => p.Nome == "Monitor Ultrawide");
+            if (produtoParaDeletar != null)
+            {
+                context.Produtos.Remove(produtoParaDeletar);
+                context.SaveChanges();
+                Console.WriteLine("Produto deletado!");
+            }
+
+            // 5. CHAMANDO A FUNÇÃO PL/pgSQL
+            Console.WriteLine("\n>> Calculando o valor total do estoque com a função PL/pgSQL...");
+
+            // Para chamar uma função scalar (que retorna um único valor),
+            // a forma mais simples e segura é usar SQL puro com EF Core.
+            decimal valorTotalEstoque = 0;
+
+            // Abre a conexão gerenciada pelo EF Core
+            var connection = context.Database.GetDbConnection();
+            connection.Open();
+
+            // Cria um comando para executar a função
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT fn_calcular_valor_total_estoque();";
+                var result = command.ExecuteScalar(); // Executa e retorna o primeiro valor da primeira linha
+
+                if (result != null && result != DBNull.Value)
+                {
+                    valorTotalEstoque = Convert.ToDecimal(result);
+                }
+            }
+            connection.Close(); // Fecha a conexão
+
+            Console.WriteLine($"O valor total do estoque é: {valorTotalEstoque:C}");
+        }
+
+        Console.WriteLine("\n--- Fim da Execução ---");
+    }
+}
+
+    Explicação do Código Principal:
+
+        using (var context = new AppDbContext()): Instancia nosso contexto. O using garante que os recursos de conexão sejam liberados ao final.
+
+        context.Add(): Adiciona uma nova entidade para ser rastreada pelo EF Core.
+
+        context.SaveChanges(): Persiste no banco de dados todas as mudanças rastreadas (inserções, atualizações, deleções).
+
+        context.Produtos.ToList(): Executa um SELECT * FROM produtos e materializa os resultados em uma lista de objetos Produto.
+
+        FirstOrDefault(): Busca o primeiro elemento que satisfaz a condição ou retorna null se nenhum for encontrado.
+
+        context.Remove(): Marca uma entidade para ser deletada.
+
+        Chamando a Função: A forma mais direta de chamar uma função que retorna um único valor (scalar function) é usar o DbConnection do próprio EF Core. Abrimos a conexão, criamos um comando com o SQL SELECT nome_da_funcao(); e usamos ExecuteScalar() para obter o resultado.
+
+Como Executar o Projeto
+
+    Verifique se o seu servidor PostgreSQL está rodando.
+
+    Abra o terminal na pasta do projeto (GerenciadorDeProdutosApp).
+
+    Execute o comando:
+    Bash
+
+dotnet run
+context.SaveChanges(): Persiste no banco de dados todas as mudanças rastreadas (inserções, atualizações, deleções).
+
+        context.Produtos.ToList(): Executa um SELECT * FROM produtos e materializa os resultados em uma lista de objetos Produto.
+
+        FirstOrDefault(): Busca o primeiro elemento que satisfaz a condição ou retorna null se nenhum for encontrado.
+
+        context.Remove(): Marca uma entidade para ser deletada.
+
+        Chamando a Função: A forma mais direta de chamar uma função que retorna um único valor (scalar function) é usar o DbConnection do próprio EF Core. Abrimos a conexão, criamos um comando com o SQL SELECT nome_da_funcao(); e usamos ExecuteScalar() para obter o resultado.
+
+Como Executar o Projeto
+
+    Verifique se o seu servidor PostgreSQL está rodando.
+
+    Abra o terminal na pasta do projeto (GerenciadorDeProdutosApp).
+
+    Execute o comando:
+    Bash
+
+dotnet run
+
+
+
+
+
+
+
+
+
+
 
 After all, execute 
 $ sudo dotnet build
